@@ -2,6 +2,7 @@ package jbittorrent
 
 import (
 	"errors"
+	"crypto/sha1"
 )
 
 type MetaInfo struct {
@@ -11,6 +12,7 @@ type MetaInfo struct {
 	CreatedBy string
 	CreationDate int
 	Info Info
+	InfoHash string
 }
 
 type Info struct {
@@ -26,13 +28,49 @@ type File struct {
 	Path []string
 }
 
-func (metaInfo *MetaInfo) ParseMetaInfo(data []byte) (error) {
-	readLen := 0
-	if data[readLen] != 'd' {
-		return errors.New("not a bencoding dictionary")
-	}
-	readLen++
+type TrackerResponse struct {
+	FailureReason string
+	WarningMessage string
+	Interval int
+	MinInterval int
+	Complete int
+	Incomplete int
+	Peers []Peer
+}
 
+type Peer struct {
+	PeerId string
+	IP string
+	Port int
+}
+
+func readPeers(data []byte) ([]Peer, int, error) {
+	if data[0] != 'l' {
+		return nil, 0, errors.New("not a bencoding list")
+	}
+	readLen := 1
+	peers := make([]Peer, 0)
+	for {
+		if data[readLen] == 'e' {
+			readLen++
+			break
+		}
+		peer := Peer{}
+		peerLen, err := readPeer(data[readLen:], &peer)
+		if err != nil {
+			return nil, 0, err
+		}
+		readLen += peerLen
+		peers = append(peers, peer)
+	}
+	return peers, readLen, nil
+}
+
+func readPeer(data []byte, peer *Peer) (int, error) {
+	if data[0] != 'd' {
+		return 0, errors.New("not a bencoding dictionary")
+	}
+	readLen := 1
 	for {
 		if data[readLen] == 'e' {
 			readLen++
@@ -40,7 +78,119 @@ func (metaInfo *MetaInfo) ParseMetaInfo(data []byte) (error) {
 		}
 		key, keyLen, err := readString(data[readLen:])
 		if err != nil {
-			return err
+			return 0, err
+		}
+		readLen += keyLen
+
+		var valueLen int
+		switch key {
+		case "peer id":
+			peer.PeerId, valueLen, err = readString(data[readLen:])
+			if err != nil {
+				return 0, err
+			}
+		case "ip":
+			peer.IP, valueLen, err = readString(data[readLen:])
+			if err != nil {
+				return 0, err
+			}
+		case "port":
+			peer.Port, valueLen, err = readInt(data[readLen:])
+			if err != nil {
+				return 0, err
+			}
+		default:
+			valueLen, err = readUnknown(data[readLen:])
+			if err != nil {
+				return 0, err
+			}
+		}
+		readLen += valueLen
+	}
+	return readLen, nil
+}
+
+func ParseTrackerResponse(data []byte) (*TrackerResponse, error) {
+	readLen := 0
+	if data[readLen] != 'd' {
+		return nil, errors.New("not a bencoding dictionary")
+	}
+	readLen++
+	trackerResponse := &TrackerResponse{}
+	for {
+		if data[readLen] == 'e' {
+			readLen++
+			break
+		}
+		key, keyLen, err := readString(data[readLen:])
+		if err != nil {
+			return nil, err
+		}
+		readLen += keyLen
+
+		var valueLen int
+		switch key {
+		case "failure reason":
+			trackerResponse.FailureReason, valueLen, err = readString(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "warning message":
+			trackerResponse.WarningMessage, valueLen, err = readString(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "interval":
+			trackerResponse.Interval, valueLen, err = readInt(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "min interval":
+			trackerResponse.MinInterval, valueLen, err = readInt(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "complete":
+			trackerResponse.Complete, valueLen, err = readInt(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "incomplete":
+			trackerResponse.Incomplete, valueLen, err = readInt(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		case "peers":
+			trackerResponse.Peers, valueLen, err = readPeers(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		default:
+			valueLen, err = readUnknown(data[readLen:])
+			if err != nil {
+				return nil, err
+			}
+		}
+		readLen += valueLen
+	}
+	return trackerResponse, nil
+}
+
+func ParseMetaInfo(data []byte) (*MetaInfo, error) {
+	readLen := 0
+	if data[readLen] != 'd' {
+		return nil, errors.New("not a bencoding dictionary")
+	}
+	readLen++
+	metaInfo := &MetaInfo{}
+	for {
+		if data[readLen] == 'e' {
+			readLen++
+			break
+		}
+		key, keyLen, err := readString(data[readLen:])
+		if err != nil {
+			return nil, err
 		}
 		readLen += keyLen
 
@@ -49,72 +199,45 @@ func (metaInfo *MetaInfo) ParseMetaInfo(data []byte) (error) {
 		case "announce":
 			metaInfo.Announce, valueLen, err = readString(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case "announce-list":
 			valueLen, err = metaInfo.readAnnouceList(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case "comment":
 			metaInfo.Comment, valueLen, err = readString(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case "created by":
 			metaInfo.CreatedBy, valueLen, err = readString(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case "creation date":
 			metaInfo.CreationDate, valueLen, err = readInt(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 		case "info":
 			valueLen, err = metaInfo.readInfo(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
+			sha1bytes := sha1.Sum(data[readLen : readLen+valueLen])
+			metaInfo.InfoHash = string(sha1bytes[:])
 		default:
 			valueLen, err = readUnknown(data[readLen:])
 			if err != nil {
-				return err
+				return nil, err
 			}
 			//return errors.New("unknown key: " + key)
 		}
 		readLen += valueLen
 	}
-	
-	// key, readBytes, err := readString(data[readLen:])
-	// if err != nil {
-	// 	return err
-	// }
-	// if key == "announce" {
-	// 	readLen += readBytes
-	// 	announce, readBytes, err := readString(data[readLen:])
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	meatInfo.Announce = announce
-	// 	readLen += readBytes
-	// }
-	// key, readBytes, err = readString(data[readLen:])
-	// if err != nil {
-	// 	return err
-	// }
-	// if key == "announce-list" {
-	// 	readLen += readBytes
-	// 	readBytes, err := metaInfo.readAnnouceList(data[readLen:])
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// 	readLen += readBytes
-	// }
-	// if key == "comment" {
-
-	
-	return nil
+	return metaInfo, nil
 }
 
 func readUnknown(data []byte) (int, error) {

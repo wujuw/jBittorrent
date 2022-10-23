@@ -54,8 +54,7 @@ func TestReadInt(t *testing.T) {
 
 func TestParseMetaInfo(t *testing.T) {
 	data := []byte("d8:announce35:http://tracker.example.com/announce13:announce-listll35:http://tracker.example.com/announceel36:http://tracker2.example.com/announceee4:infod6:lengthi123456e4:name4:spam12:piece lengthi16384e6:pieces20:aaaaaaaaaaaaaaaaaaaaee")
-	metaInfo := MetaInfo{}
-	err := metaInfo.ParseMetaInfo(data)
+	metaInfo, err := ParseMetaInfo(data)
 	if err != nil {
 		t.Error("Error parsing metainfo: ", err)
 	}
@@ -88,14 +87,14 @@ func TestParseMetaInfoFile(t *testing.T) {
 		t.Error("Error opening file: ", err)
 	}
 	defer file.Close()
-	metaInfo := MetaInfo{}
 	// Read the file into a byte array
 	data := make([]byte, 1024 * 1024)
 	n, err := file.Read(data)
 	if err != nil && err != io.EOF {
 		t.Error("Error reading file: ", err)
 	}
-	err = metaInfo.ParseMetaInfo(data[:n])
+	var metaInfo *MetaInfo
+	metaInfo, err = ParseMetaInfo(data[:n])
 	if err != nil {
 		t.Error("Error parsing metainfo: ", err)
 	}
