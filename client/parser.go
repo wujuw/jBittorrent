@@ -1,4 +1,4 @@
-package jbittorrent
+package client
 
 import (
 	"errors"

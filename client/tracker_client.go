@@ -1,4 +1,4 @@
-package jbittorrent
+package client
 
 import (
 	"fmt"
@@ -13,15 +13,16 @@ type TrackerClient struct {
 
 	info_hash string
 	peer_id string
-	port uint16
+	port int
 	uploaded int
 	downloaded int
 	left int
+	compact int
 	numwant int
 	event string
 }
 
-func NewTrackerClient(trackerUrl string, info_hash string, peer_id string, port uint16, uploaded int, downloaded int, left int, numwant int, event string) *TrackerClient {
+func NewTrackerClient(trackerUrl string, info_hash string, peer_id string, port int, uploaded int, downloaded int, left int, compact int, numwant int, event string) *TrackerClient {
 	return &TrackerClient{
 		httpClient: &http.Client{},
 		trackerUrl: trackerUrl,
@@ -31,14 +32,15 @@ func NewTrackerClient(trackerUrl string, info_hash string, peer_id string, port 
 		uploaded: uploaded,
 		downloaded: downloaded,
 		left: left,
+		compact: compact,
 		numwant: numwant,
 		event: event,
 	}
 }
 
 func (client *TrackerClient) queryParam() (string) {
-	return fmt.Sprintf("?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&numwant=%d&event=%s",
-		url.QueryEscape(client.info_hash), url.QueryEscape(client.peer_id), client.port, client.uploaded, client.downloaded, client.left, client.numwant, client.event)
+	return fmt.Sprintf("?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&compact=%d&numwant=%d&event=%s",
+		url.QueryEscape(client.info_hash), url.QueryEscape(client.peer_id), client.port, client.uploaded, client.downloaded, client.left, client.compact, client.numwant, client.event)
 }
 
 func (client *TrackerClient) Announce() (*TrackerResponse, error) {
