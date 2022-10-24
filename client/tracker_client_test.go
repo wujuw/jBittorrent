@@ -26,10 +26,13 @@ func TestTrackerClient(t *testing.T) {
 	}
 	peerId := "-JB0001-123456789012"
 	fmt.Println(metaInfo.InfoHash)
-	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId, 6881, 0, 0, metaInfo.Info.Length, 0, 4, "empty")
-	trackerResponse, err := trackerClient.Announce()
+	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId, 6881, 0, 0, metaInfo.Info.Length, 1, 4, "empty")
+	_, err = trackerClient.Announce()
 	if err != nil {
 		t.Error("Error announcing to tracker: ", err)
 	}
-	fmt.Print(trackerResponse)
+	_, err = trackerClient.AnnounceWithoutCompact() //解析无压缩的Peers
+	if err != nil {
+		t.Error("Error announcing to tracker: ", err)
+	}
 }

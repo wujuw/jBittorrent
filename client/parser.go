@@ -1,8 +1,9 @@
 package client
 
 import (
-	"errors"
 	"crypto/sha1"
+	"errors"
+	"fmt"
 )
 
 type MetaInfo struct {
@@ -45,25 +46,41 @@ type Peer struct {
 }
 
 func readPeers(data []byte) ([]Peer, int, error) {
-	if data[0] != 'l' {
-		return nil, 0, errors.New("not a bencoding list")
-	}
-	readLen := 1
-	peers := make([]Peer, 0)
-	for {
-		if data[readLen] == 'e' {
-			readLen++
-			break
+	if data[0] == 'l' { //未压缩
+		if data[0] != 'l' {
+			return nil, 0, errors.New("not a bencoding list")
 		}
-		peer := Peer{}
-		peerLen, err := readPeer(data[readLen:], &peer)
+		readLen := 1
+		peers := make([]Peer, 0)
+		for {
+			if data[readLen] == 'e' {
+				readLen++
+				break
+			}
+			peer := Peer{}
+			peerLen, err := readPeer(data[readLen:], &peer)
+			if err != nil {
+				return nil, 0, err
+			}
+			readLen += peerLen
+			peers = append(peers, peer)
+		}
+		return peers, readLen, nil
+	} else { //压缩
+		peerstr, readLen, err := readString(data)
 		if err != nil {
-			return nil, 0, err
+			return nil, 0, fmt.Errorf("read compact string peers error: %s", err)
 		}
-		readLen += peerLen
-		peers = append(peers, peer)
+		if len(peerstr) % 6 != 0 {
+			return nil, 0, errors.New("compact string peers length error")
+		}
+		peers := make([]Peer, len(peerstr)/6)
+		for i:=0; i<len(peerstr); i+=6 { //network-byte order
+			peers[i/6].IP = fmt.Sprintf("%d.%d.%d.%d", peerstr[i], peerstr[i+1], peerstr[i+2], peerstr[i+3])
+			peers[i/6].Port = int(peerstr[i+4])<<8 + int(peerstr[i+5])
+		}
+		return peers, readLen, nil
 	}
-	return peers, readLen, nil
 }
 
 func readPeer(data []byte, peer *Peer) (int, error) {

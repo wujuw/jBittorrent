@@ -43,8 +43,23 @@ func (client *TrackerClient) queryParam() (string) {
 		url.QueryEscape(client.info_hash), url.QueryEscape(client.peer_id), client.port, client.uploaded, client.downloaded, client.left, client.compact, client.numwant, client.event)
 }
 
+func (client *TrackerClient) queryParamWithoutCompact() (string) {
+	return fmt.Sprintf("?info_hash=%s&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&numwant=%d&event=%s",
+		url.QueryEscape(client.info_hash), url.QueryEscape(client.peer_id), client.port, client.uploaded, client.downloaded, client.left, client.numwant, client.event)
+}
+
 func (client *TrackerClient) Announce() (*TrackerResponse, error) {
-	res, err := client.httpClient.Get(client.trackerUrl + client.queryParam())
+	return client.AnnounceWithParams(client.queryParam())
+}
+
+//测试是否能解析无压缩Peers
+func (client *TrackerClient) AnnounceWithoutCompact() (*TrackerResponse, error) {
+	return client.AnnounceWithParams(client.queryParamWithoutCompact())
+}
+
+//方便测试
+func (client *TrackerClient) AnnounceWithParams(urlParams string) (*TrackerResponse, error) {
+	res, err := client.httpClient.Get(client.trackerUrl + urlParams)
 	if err != nil {
 		return nil, err
 	}
