@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"github.com/wujuw/jBittorrent/client"
+	// "time"
 )
 
 func main() {
@@ -39,4 +40,5 @@ func main() {
 		os.Exit(1)
 	}
 
+	// time.Sleep(100 * time.Second)
 }

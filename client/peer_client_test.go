@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	// "time"
 )
 
 func TestHandShake(t *testing.T) {
@@ -25,9 +26,9 @@ func TestHandShake(t *testing.T) {
 		t.Error("could not create peer client: ", err)
 	}
 
-	err = pc.Start()
-	if err != nil {
-		t.Error("could not start peer client: ", err)
-	}
+	pc.Start()
+
+	// sleep
+	// time.Sleep(10 * time.Second)
 
 }

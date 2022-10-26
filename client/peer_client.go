@@ -3,9 +3,10 @@ package client
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"math/rand"
 	"net"
-	"io"
+	"time"
 )
 
 const (
@@ -25,6 +26,7 @@ type PeerClient struct {
 
 func NewPeerClient(metaInfo *MetaInfo) (*PeerClient, error) {
 	peerId := randomString(20)
+	// peerId := "-UT0001-123456789012"
 	peerPort := 6881
 
 	for peerPort < 6889 {
@@ -41,13 +43,13 @@ func NewPeerClient(metaInfo *MetaInfo) (*PeerClient, error) {
 	}
 
 	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId,
-		 peerPort, 0, 0, metaInfo.Info.Length, 1, 10, "empty")
+		 peerPort, 0, 0, metaInfo.Info.Length, 1, 50, "empty")
 
 	handShakeMsg := make([]byte, 68)
 	handShakeMsg[0] = byte(pstrlen)
 	copy(handShakeMsg[1:20], []byte(pstr))
 	copy(handShakeMsg[20:28], reserved[:])
-	copy(handShakeMsg[28:48], metaInfo.InfoHash[:])
+	copy(handShakeMsg[28:48], []byte(metaInfo.InfoHash)[:])
 	copy(handShakeMsg[48:68], []byte(peerId))
 
 	return &PeerClient{
@@ -64,46 +66,45 @@ func (client *PeerClient) Start() error {
 	if err != nil {
 		return err
 	}
-	defer client.trackerClient.httpClient.CloseIdleConnections()
-	conn, err := client.Connect(&trackerResponse.Peers[0])
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	
+	for _, peer := range trackerResponse.Peers {
 
-	err = client.HandShake(&trackerResponse.Peers[0], conn)
-	if err != nil {
-		return err
+		
+			conn, err := client.Connect(&peer)
+			if err != nil {
+				fmt.Println("Error connecting to peer: ", err)
+				continue
+			}
+
+			client.HandShake(&peer, conn)
+		
 	}
 	return nil
 }
 
-func (client *PeerClient) Connect(server *Peer) (*net.TCPConn, error) {
-	lAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", client.peerPort))
+func (client *PeerClient) Connect(server *Peer) (net.Conn, error) {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port), 2 * time.Second)
+	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port))
+
 	if err != nil {
+		fmt.Println("Error connecting to peer: ", err)
 		return nil, err
 	}
-	rAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port))
-	if err != nil {
-		return nil, err
-	}
-	conn, err := net.DialTCP("tcp", lAddr, rAddr)
-	if err != nil {
-		return nil, err
-	}
-	
+
 	return conn, nil
 }
 
-func (client *PeerClient) HandShake(server *Peer, conn *net.TCPConn) error {
+func (client *PeerClient) HandShake(server *Peer, conn net.Conn) error {
 	_, err := conn.Write(client.handShakeMsg)
 	if err != nil {
+		fmt.Println("Error writing handshake: ", err)
 		return fmt.Errorf("could not send handshake message: %s", err)
 	}
 
 	resp := make([]byte, 68)
 	n, err := io.ReadFull(conn, resp)
 	if err != nil {
+		fmt.Println("Error reading handshake: ", err)
 		return err
 	}
 	if n != 68 {
@@ -115,6 +116,8 @@ func (client *PeerClient) HandShake(server *Peer, conn *net.TCPConn) error {
 		(server.PeerId != "" && !bytes.Equal(resp[48:68], []byte(server.PeerId))) {
 		return fmt.Errorf("handshake response: %s is not valid", resp)
 	}
+
+	fmt.Println("Handshake successful")
 
 	return nil
 }
