@@ -8,7 +8,7 @@ import (
 )
 
 func TestTrackerClient(t *testing.T) {
-	file, err := os.Open("debian-11.5.0-amd64-DVD-1.iso.torrent")
+	file, err := os.Open("ubuntu-22.10-desktop-amd64.iso.torrent")
 	if err != nil {
 		t.Error("Error opening file: ", err)
 	}
