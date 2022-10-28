@@ -130,7 +130,7 @@ func (client *Client) FetchPeers(cancelChan chan struct{}) {
 func (client *Client) DownloadFromPeer(Id int) {
 	defer client.wg.Done()
 	for {
-		downloader, err := NewDownloader(<-client.peerChan, client.handShakeMsg, Id)
+		downloader, err := NewDownloader(<-client.peerChan, client.handShakeMsg, client.bitField, Id)
 		log.Println("new downloader ", Id)
 		if err != nil {
 			continue

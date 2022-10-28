@@ -24,7 +24,7 @@ type State struct {
 	peer_interested bool
 }
 
-func NewDownloader(peer *Peer, handShakeMsg []byte, Id int) (*Downloader, error) {
+func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*Downloader, error) {
 	conn, err := Connect(peer)
 	if err != nil {
 		fmt.Println("Error connecting to peer: ", err)
@@ -35,6 +35,8 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, Id int) (*Downloader, error)
 		fmt.Println("Error handshaking with peer: ", err)
 		return nil, err
 	}
+
+	sendBitfield(conn, bitfield)
 
 	bitfieldMsg, err := getBitfield(conn)
 	if err != nil {
@@ -193,6 +195,15 @@ func (downloader *Downloader) Keepalive() error {
 			return err
 		}
 	}
+}
+
+func sendBitfield(conn net.Conn, bitfield []byte) error {
+	msg := Message{
+		typeId: Bitfield,
+		payload: bitfield,
+	}
+	_, err := msg.WriteTo(conn)
+	return err
 }
 
 func getBitfield(conn net.Conn) (*Message, error) {
