@@ -139,39 +139,55 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 		piece := make([]byte, task.PieceLength)
 		slicebegin := 0
 		slicelength := 16384
+
 		for slicebegin < task.PieceLength {
-			if slicebegin+slicelength > task.PieceLength {
-				slicelength = task.PieceLength - slicebegin
-			}
-			err := sendRequest(client.conn, task.PieceIndex, slicebegin, slicelength)
-			if err != nil {
-				fmt.Println("Error sending request: ", err)
-				fallbackChan <- task
-				return err
-			}
-			for pieceMsg := false; !pieceMsg; {
-				msg, err := ReadMessageFrom(client.conn)
-				if err != nil {
-					fmt.Println("Error reading message: ", err)
-					fallbackChan <- task
-					return err
-				}
-				switch msg.typeId {
-				case Piece:
-					pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
-					begin := uint32(BytesToInt32(msg.payload[4:8]))
-					slice := msg.payload[8:]
-					if pieceIndex != uint32(task.PieceIndex) {
-						fmt.Println("Error: piece index does not match")
-						continue
-					} else if begin != uint32(slicebegin) {
-						fmt.Println("Error: begin does not match")
-						continue
+			slicebeginSend := slicebegin
+			slicelengthSend := slicelength
+			for i := 0; i < 10; i++ {
+				if slicebeginSend < task.PieceLength {
+					if slicebeginSend+slicelengthSend > task.PieceLength {
+						slicelengthSend = task.PieceLength - slicebeginSend
 					}
-					copy(piece[slicebegin:], slice)
-					slicebegin += slicelength
-					fmt.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB\n", task.PieceIndex, slicebegin, slicelength)
-					pieceMsg = true
+					err := sendRequest(client.conn, task.PieceIndex, slicebeginSend, slicelengthSend)
+					if err != nil {
+						fmt.Println("Error sending request: ", err)
+						fallbackChan <- task
+						return err
+					}
+					slicebeginSend += slicelengthSend
+				} else {
+					break
+				}
+			}
+			for i := 0; i < 10; i++ {
+				if slicebegin < task.PieceLength {
+					for pieceMsg := false; !pieceMsg; {
+						msg, err := ReadMessageFrom(client.conn)
+						if err != nil {
+							fmt.Println("Error reading message: ", err)
+							fallbackChan <- task
+							return err
+						}
+						switch msg.typeId {
+						case Piece:
+							pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
+							begin := uint32(BytesToInt32(msg.payload[4:8]))
+							slice := msg.payload[8:]
+							if pieceIndex != uint32(task.PieceIndex) {
+								fmt.Println("Error: piece index does not match")
+								continue
+							} else if begin != uint32(slicebegin) {
+								fmt.Println("Error: begin does not match")
+								continue
+							}
+							copy(piece[slicebegin:], slice)
+							slicebegin += len(slice)
+							fmt.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB\n", task.PieceIndex, slicebegin, slicelength)
+							pieceMsg = true
+						}
+					}
+				} else {
+					break
 				}
 			}
 		}
