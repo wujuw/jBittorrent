@@ -7,13 +7,13 @@ import (
 )
 
 type PieceSaver struct {
-	file *os.File
+	file         *os.File
 	bitfieldFile *os.File
 }
 
 func NewPieceSaver(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) (*PieceSaver, error) {
 	filePath := downloadDir + "/" + metaInfo.Info.Name
-	bitfieldFilePath :=  bitfieldDir + "/" + metaInfo.Info.Name + ".bitfield"
+	bitfieldFilePath := bitfieldDir + "/" + metaInfo.Info.Name + ".bitfield"
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		// create file
 		file, err := create(filePath)
@@ -39,7 +39,7 @@ func NewPieceSaver(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) (
 		return nil, err
 	}
 	if err := os.MkdirAll(bitfieldDir, 0777); err != nil {
-			return nil, err
+		return nil, err
 	}
 	bifieldFile, err := os.OpenFile(bitfieldFilePath, os.O_WRONLY|os.O_CREATE, 0666)
 	if err != nil {
@@ -48,13 +48,13 @@ func NewPieceSaver(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) (
 	}
 
 	return &PieceSaver{
-		file: file,
+		file:         file,
 		bitfieldFile: bifieldFile,
 	}, nil
 }
 
 func (ps *PieceSaver) SavePiece(saveTask SavePieceTask, bitfield []byte) error {
-	_, err := ps.file.WriteAt(saveTask.Piece, int64(saveTask.PieceIndex * saveTask.FixedPieceLength))
+	_, err := ps.file.WriteAt(saveTask.Piece, int64(saveTask.PieceIndex*saveTask.FixedPieceLength))
 	if err != nil {
 		log.Fatal("Error writing to file: ", err)
 		return err
@@ -69,7 +69,7 @@ func (ps *PieceSaver) Close() {
 }
 
 func GetBitfield(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) []byte {
-	bitfieldFilePath :=  bitfieldDir + "/" + metaInfo.Info.Name + ".bitfield"
+	bitfieldFilePath := bitfieldDir + "/" + metaInfo.Info.Name + ".bitfield"
 
 	if _, err := os.Stat(downloadDir + "/" + metaInfo.Info.Name); os.IsNotExist(err) {
 		if _, err := os.Stat(bitfieldFilePath); err == nil {
@@ -82,7 +82,6 @@ func GetBitfield(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) []b
 		return make([]byte, 1+len(metaInfo.Info.Pieces)/8)
 	}
 
-	
 	if stat, err := os.Stat(bitfieldFilePath); os.IsNotExist(err) {
 		return make([]byte, 1+len(metaInfo.Info.Pieces)/8)
 	} else if stat.Size() == 0 {
@@ -104,8 +103,8 @@ func GetBitfield(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) []b
 }
 
 func create(p string) (*os.File, error) {
-    if err := os.MkdirAll(filepath.Dir(p), 0770); err != nil {
-        return nil, err
-    }
-    return os.Create(p)
+	if err := os.MkdirAll(filepath.Dir(p), 0770); err != nil {
+		return nil, err
+	}
+	return os.Create(p)
 }

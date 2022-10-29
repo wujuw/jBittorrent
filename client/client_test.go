@@ -1,13 +1,13 @@
 package client
 
 import (
-	"testing"
-	"os"
 	"fmt"
 	"io"
+	"os"
+	"testing"
 )
 
-func TestMain(t *testing.T) {
+func TestMain(m *testing.M) {
 	os.Args[1] = "client/ubuntu-22.10-desktop-amd64.iso.torrent"
 	os.Args[2] = "/home/whhxd/codebase/jBittorrent/client/download"
 	file, err := os.Open(os.Args[1])

@@ -5,16 +5,16 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"time"
-	"log"
 )
 
 type Downloader struct {
 	bitfield []byte
 	conn     net.Conn
 	state    *State
-	Id 	 int
+	Id       int
 }
 
 type State struct {
@@ -60,13 +60,11 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*D
 		bitfield: bitfieldMsg.payload,
 		conn:     conn,
 		state:    state,
-		Id: Id,
+		Id:       Id,
 	}, nil
 }
 
 func Connect(server *Peer) (net.Conn, error) {
-	// check ip is v6
-
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("[%s]:%d", server.IP, server.Port), 2*time.Second)
 	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port))
 
@@ -98,7 +96,7 @@ func HandShake(server *Peer, handShakeMsg []byte, conn net.Conn) error {
 	if !bytes.Equal(resp[0:20], handShakeMsg[0:20]) ||
 		!bytes.Equal(resp[28:48], handShakeMsg[28:48]) ||
 		(server.PeerId != "" && !bytes.Equal(resp[48:68], []byte(server.PeerId))) {
-		return fmt.Errorf("handshake response: %s is not valid", resp)
+		//return fmt.Errorf("handshake response: %s is not valid", resp)
 	}
 
 	fmt.Println("Handshake successful")
@@ -141,7 +139,7 @@ func (client *Downloader) Download(downloadChan chan DownloadPieceTask, saveChan
 			fmt.Println("Starting download of piece: ", task.PieceIndex)
 			piece := make([]byte, task.PieceLength)
 			slicebegin := 0
-			slicelength := 214214
+			slicelength := 16384
 			for slicebegin < task.PieceLength {
 				if slicebegin+slicelength > task.PieceLength {
 					slicelength = task.PieceLength - slicebegin
@@ -152,29 +150,34 @@ func (client *Downloader) Download(downloadChan chan DownloadPieceTask, saveChan
 					downloadChan <- task
 					return err
 				}
-				msg, err := ReadMessageFrom(client.conn)
-				if err != nil {
-					fmt.Println("Error reading message: ", err)
-					downloadChan <- task
-					return err
-				}
-				switch msg.typeId {
-				case Piece:
-					pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
-					begin := uint32(BytesToInt32(msg.payload[4:8]))
-					slice := msg.payload[8:]
-					if pieceIndex != uint32(task.PieceIndex) {
-						fmt.Println("Error: piece index does not match")
-						continue
-					} else if begin != uint32(slicebegin) {
-						fmt.Println("Error: begin does not match")
-						continue
+				for pieceMsg := false; !pieceMsg; {
+					msg, err := ReadMessageFrom(client.conn)
+					if err != nil {
+						fmt.Println("Error reading message: ", err)
+						downloadChan <- task
+						return err
 					}
-					copy(piece[slicebegin:], slice)
-					fmt.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB", task.PieceIndex, slicebegin, slicelength)
+					switch msg.typeId {
+					case Piece:
+						pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
+						begin := uint32(BytesToInt32(msg.payload[4:8]))
+						slice := msg.payload[8:]
+						if pieceIndex != uint32(task.PieceIndex) {
+							fmt.Println("Error: piece index does not match")
+							continue
+						} else if begin != uint32(slicebegin) {
+							fmt.Println("Error: begin does not match")
+							continue
+						}
+						copy(piece[slicebegin:], slice)
+						slicebegin += slicelength
+						fmt.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB\n", task.PieceIndex, slicebegin, slicelength)
+						pieceMsg = true
+					}
 				}
 			}
-			if (!bytes.Equal(sha1.New().Sum(piece), task.PieceHash[:])) {
+			downloadPieceHash := sha1.Sum(piece)
+			if !bytes.Equal(downloadPieceHash[:], task.PieceHash[:]) {
 				fmt.Println("Error: piece hash does not match")
 				downloadChan <- task
 				continue
@@ -201,7 +204,7 @@ func (downloader *Downloader) Keepalive() error {
 
 func sendBitfield(conn net.Conn, bitfield []byte) error {
 	msg := Message{
-		typeId: Bitfield,
+		typeId:  Bitfield,
 		payload: bitfield,
 	}
 	_, err := msg.WriteTo(conn)

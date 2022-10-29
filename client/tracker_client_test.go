@@ -1,10 +1,10 @@
 package client
 
 import (
-	"testing"
 	"fmt"
-	"os"
 	"io"
+	"os"
+	"testing"
 )
 
 func TestTrackerClient(t *testing.T) {
@@ -14,7 +14,7 @@ func TestTrackerClient(t *testing.T) {
 	}
 	defer file.Close()
 	// Read the file into a byte array
-	data := make([]byte, 1024 * 1024)
+	data := make([]byte, 1024*1024)
 	n, err := file.Read(data)
 	if err != nil && err != io.EOF {
 		t.Error("Error reading file: ", err)

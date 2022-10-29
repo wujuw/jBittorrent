@@ -8,37 +8,36 @@ import (
 )
 
 const (
-	pstrlen = 19
-	pstr    = "BitTorrent protocol"
+	pstrlen     = 19
+	pstr        = "BitTorrent protocol"
 	bitfieldDir = "bitfield"
 )
+
 var reserved = [8]byte{0, 0, 0, 0, 0, 0, 0, 0}
 
-
 type DownloadPieceTask struct {
-	PieceIndex int
+	PieceIndex  int
 	PieceLength int
-	PieceHash [20]byte
+	PieceHash   [20]byte
 }
 
 type SavePieceTask struct {
-	PieceIndex int
+	PieceIndex       int
 	FixedPieceLength int
-	Piece []byte
+	Piece            []byte
 }
 
-
 type Client struct {
-	bitField []byte
-	pieceNum int
-	wg sync.WaitGroup
-	metaInfo *MetaInfo
+	bitField      []byte
+	pieceNum      int
+	wg            sync.WaitGroup
+	metaInfo      *MetaInfo
 	trackerClient *TrackerClient
-	handShakeMsg []byte
-	downloadChan chan DownloadPieceTask
-	saveChan chan SavePieceTask
-	peerChan chan *Peer
-	downloadDir string
+	handShakeMsg  []byte
+	downloadChan  chan DownloadPieceTask
+	saveChan      chan SavePieceTask
+	peerChan      chan *Peer
+	downloadDir   string
 	downloaderNum int
 }
 
@@ -46,21 +45,20 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 	peerId := randomString(20)
 	// peerId := "-UT0001-123456789012"
 	peerPort := 6881
-	
 
 	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId,
 		peerPort, 0, 0, metaInfo.Info.Length, 1, 50, "empty")
-	
+
 	return &Client{
-		bitField: GetBitfield(metaInfo, downloadDir, bitfieldDir),
-		pieceNum: len(metaInfo.Info.Pieces)/20,
-		metaInfo: metaInfo,
+		bitField:      GetBitfield(metaInfo, downloadDir, bitfieldDir),
+		pieceNum:      len(metaInfo.Info.Pieces) / 20,
+		metaInfo:      metaInfo,
 		trackerClient: trackerClient,
-		handShakeMsg: handShakeMsg(metaInfo, peerId),
-		downloadChan: make(chan DownloadPieceTask, 100),
-		saveChan: make(chan SavePieceTask, 100),
-		peerChan: make(chan *Peer, 10),
-		downloadDir: downloadDir,
+		handShakeMsg:  handShakeMsg(metaInfo, peerId),
+		downloadChan:  make(chan DownloadPieceTask, 100),
+		saveChan:      make(chan SavePieceTask, 100),
+		peerChan:      make(chan *Peer, 10),
+		downloadDir:   downloadDir,
 		downloaderNum: downloaderNum,
 	}, nil
 }
@@ -99,7 +97,7 @@ func (client *Client) SavePiece() {
 		} else {
 			client.trackerClient.downloaded += len(saveTask.Piece)
 			client.trackerClient.left -= len(saveTask.Piece)
-			if (client.trackerClient.left == 0) {
+			if client.trackerClient.left == 0 {
 				client.trackerClient.event = "completed"
 				log.Println("download finished")
 				return
@@ -151,15 +149,15 @@ func (client *Client) SendDownloadTask() {
 	for i := 0; i < client.pieceNum; i++ {
 		bitFiledIndex := i / 8
 		bitFiledOffset := i % 8
-		if client.bitField[bitFiledIndex] & (1 << uint(7-bitFiledOffset)) == 0 {
+		if client.bitField[bitFiledIndex]&(1<<uint(7-bitFiledOffset)) == 0 {
 			var pieceLength int
-			if i == client.pieceNum - 1 {
+			if i == client.pieceNum-1 {
 				pieceLength = client.metaInfo.Info.Length % client.metaInfo.Info.PieceLength
 			} else {
 				pieceLength = client.metaInfo.Info.PieceLength
 			}
 			// left some space of chan to avoid block
-			if len(client.downloadChan) < cap(client.downloadChan) - client.downloaderNum {
+			if len(client.downloadChan) < cap(client.downloadChan)-client.downloaderNum {
 				client.downloadChan <- DownloadPieceTask{i, pieceLength, client.metaInfo.Info.Pieces[i]}
 			} else {
 				time.Sleep(10 * time.Second)

@@ -7,42 +7,42 @@ import (
 )
 
 type MetaInfo struct {
-	Announce string
+	Announce     string
 	AnnounceList [][]string
-	Comment string
-	CreatedBy string
+	Comment      string
+	CreatedBy    string
 	CreationDate int
-	Info Info
-	InfoHash string
+	Info         Info
+	InfoHash     string
 }
 
 type Info struct {
-	Files []File
-	Length int
-	Name string
+	Files       []File
+	Length      int
+	Name        string
 	PieceLength int
-	Pieces [][20]byte
+	Pieces      [][20]byte
 }
 
 type File struct {
 	Length int
-	Path []string
+	Path   []string
 }
 
 type TrackerResponse struct {
-	FailureReason string
+	FailureReason  string
 	WarningMessage string
-	Interval int
-	MinInterval int
-	Complete int
-	Incomplete int
-	Peers []Peer
+	Interval       int
+	MinInterval    int
+	Complete       int
+	Incomplete     int
+	Peers          []Peer
 }
 
 type Peer struct {
 	PeerId string
-	IP string
-	Port int
+	IP     string
+	Port   int
 }
 
 func readPeers(data []byte) ([]Peer, int, error) {
@@ -71,11 +71,11 @@ func readPeers(data []byte) ([]Peer, int, error) {
 		if err != nil {
 			return nil, 0, fmt.Errorf("read compact string peers error: %s", err)
 		}
-		if len(peerstr) % 6 != 0 {
+		if len(peerstr)%6 != 0 {
 			return nil, 0, errors.New("compact string peers length error")
 		}
 		peers := make([]Peer, len(peerstr)/6)
-		for i:=0; i<len(peerstr); i+=6 { //network-byte order
+		for i := 0; i < len(peerstr); i += 6 { //network-byte order
 			peers[i/6].IP = fmt.Sprintf("%d.%d.%d.%d", peerstr[i], peerstr[i+1], peerstr[i+2], peerstr[i+3])
 			peers[i/6].Port = int(peerstr[i+4])<<8 + int(peerstr[i+5])
 		}
@@ -301,7 +301,7 @@ func readDictionary(data []byte) (int, error) {
 }
 
 func (metaInfo *MetaInfo) readInfo(data []byte) (int, error) {
-	if (data[0] != 'd') {
+	if data[0] != 'd' {
 		return 0, errors.New("invalid info")
 	}
 	readLen := 1
@@ -356,7 +356,7 @@ func (metaInfo *MetaInfo) readInfo(data []byte) (int, error) {
 }
 
 func (metaInfo *MetaInfo) readFiles(data []byte) (int, error) {
-	if (data[0] != 'l') {
+	if data[0] != 'l' {
 		return 0, errors.New("invalid files")
 	}
 	readLen := 1
@@ -412,10 +412,10 @@ func (metaInfo *MetaInfo) readPieces(data []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if bytesLen % 20 != 0 {
+	if bytesLen%20 != 0 {
 		return 0, errors.New("invalid pieces")
 	}
-	for i:=0; i<bytesLen; i += 20 {
+	for i := 0; i < bytesLen; i += 20 {
 		var piece [20]byte
 		copy(piece[:], data[readLen+i:readLen+i+20])
 		metaInfo.Info.Pieces = append(metaInfo.Info.Pieces, piece)
@@ -482,7 +482,7 @@ func readString(data []byte) (string, int, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	return string(data[readLen:readLen+int(lengthPrefix)]), readLen+lengthPrefix, nil
+	return string(data[readLen : readLen+int(lengthPrefix)]), readLen + lengthPrefix, nil
 }
 
 func readLengthPrefix(data []byte) (int, int, error) {
@@ -495,7 +495,7 @@ func readLengthPrefix(data []byte) (int, int, error) {
 		} else if b < '0' || b > '9' {
 			return 0, 0, errors.New("invalid length-prefix")
 		} else {
-			lengthPrefix = lengthPrefix * 10 + int(b - '0')
+			lengthPrefix = lengthPrefix*10 + int(b-'0')
 			readLen++
 		}
 	}
@@ -517,7 +517,7 @@ func readInt(data []byte) (int, int, error) {
 		} else if b < '0' || b > '9' {
 			return 0, 0, errors.New("invalid integer")
 		} else {
-			intVal = intVal * 10 + factor * int(b - '0')
+			intVal = intVal*10 + factor*int(b-'0')
 			readLen++
 		}
 	}

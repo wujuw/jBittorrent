@@ -14,8 +14,6 @@ func main() {
 		fmt.Println("Usage:", os.Args[0], " <torrent file>", "<destination directory>")
 		os.Exit(1)
 	}
-	// os.Args[1] = "debian-11.5.0-amd64-DVD-1.iso.torrent"
-	// os.Args[2] = "/home/whhxd/codebase/jBittorrent/client/download"
 	file, err := os.Open(os.Args[1])
 	if err != nil {
 		fmt.Println("Error opening file:", err)
@@ -31,7 +29,7 @@ func main() {
 		fmt.Println("Error parsing metainfo:", err)
 		os.Exit(1)
 	}
-	client, err := client.NewClient(metaInfo, os.Args[2], 8)
+	client, err := client.NewClient(metaInfo, os.Args[2], 16)
 	if err != nil {
 		fmt.Println("Error creating peer client:", err)
 		os.Exit(1)

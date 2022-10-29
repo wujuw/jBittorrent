@@ -66,7 +66,7 @@ func ReadMessageFrom(r io.Reader) (*Message, error) {
 		return nil, err
 	}
 
-	if (length == 1) {
+	if length == 1 {
 		return NewMessage(data[0], nil), nil
 	} else {
 		fmt.Println("length: ", length)
