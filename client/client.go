@@ -4,7 +4,6 @@ import (
 	"log"
 	"math/rand"
 	"sync"
-	"time"
 )
 
 const (
@@ -36,6 +35,7 @@ type Client struct {
 	handShakeMsg  []byte
 	downloadChan  chan DownloadPieceTask
 	saveChan      chan SavePieceTask
+	fallbackChan  chan DownloadPieceTask
 	peerChan      chan *Peer
 	downloadDir   string
 	downloaderNum int
@@ -51,11 +51,12 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 
 	return &Client{
 		bitField:      GetBitfield(metaInfo, downloadDir, bitfieldDir),
-		pieceNum:      len(metaInfo.Info.Pieces) / 20,
+		pieceNum:      len(metaInfo.Info.Pieces),
 		metaInfo:      metaInfo,
 		trackerClient: trackerClient,
 		handShakeMsg:  handShakeMsg(metaInfo, peerId),
 		downloadChan:  make(chan DownloadPieceTask, 100),
+		fallbackChan:  make(chan DownloadPieceTask, downloaderNum+1),
 		saveChan:      make(chan SavePieceTask, 100),
 		peerChan:      make(chan *Peer, 10),
 		downloadDir:   downloadDir,
@@ -100,6 +101,8 @@ func (client *Client) SavePiece() {
 			if client.trackerClient.left == 0 {
 				client.trackerClient.event = "completed"
 				log.Println("download finished")
+				close(client.fallbackChan)
+				close(client.downloadChan)
 				return
 			}
 		}
@@ -133,7 +136,7 @@ func (client *Client) DownloadFromPeer(Id int) {
 		if err != nil {
 			continue
 		}
-		err = downloader.Download(client.downloadChan, client.saveChan)
+		err = downloader.Download(client.downloadChan, client.saveChan, client.fallbackChan)
 		if err != nil {
 			log.Println("downloader error ", err)
 			continue
@@ -156,17 +159,16 @@ func (client *Client) SendDownloadTask() {
 			} else {
 				pieceLength = client.metaInfo.Info.PieceLength
 			}
-			// left some space of chan to avoid block
-			if len(client.downloadChan) < cap(client.downloadChan)-client.downloaderNum {
-				client.downloadChan <- DownloadPieceTask{i, pieceLength, client.metaInfo.Info.Pieces[i]}
-			} else {
-				time.Sleep(10 * time.Second)
-				i--
+			for len(client.fallbackChan) > 0 {
+				client.downloadChan <- <-client.fallbackChan
 			}
+			client.downloadChan <- DownloadPieceTask{i, pieceLength, client.metaInfo.Info.Pieces[i]}
 		}
 	}
 
-	close(client.downloadChan)
+	for failTask := range client.fallbackChan {
+		client.downloadChan <- failTask
+	}
 }
 
 func handShakeMsg(metaInfo *MetaInfo, clientId string) []byte {
