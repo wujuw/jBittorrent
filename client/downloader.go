@@ -65,7 +65,9 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*D
 }
 
 func Connect(server *Peer) (net.Conn, error) {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port), 2*time.Second)
+	// check ip is v6
+
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("[%s]:%d", server.IP, server.Port), 2*time.Second)
 	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port))
 
 	if err != nil {
