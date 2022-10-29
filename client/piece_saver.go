@@ -7,8 +7,9 @@ import (
 )
 
 type PieceSaver struct {
-	file         *os.File
-	bitfieldFile *os.File
+	file             *os.File
+	bitfieldFile     *os.File
+	fixedPieceLength int
 }
 
 func NewPieceSaver(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) (*PieceSaver, error) {
@@ -48,13 +49,14 @@ func NewPieceSaver(metaInfo *MetaInfo, downloadDir string, bitfieldDir string) (
 	}
 
 	return &PieceSaver{
-		file:         file,
-		bitfieldFile: bifieldFile,
+		file:             file,
+		bitfieldFile:     bifieldFile,
+		fixedPieceLength: metaInfo.Info.PieceLength,
 	}, nil
 }
 
 func (ps *PieceSaver) SavePiece(saveTask SavePieceTask, bitfield []byte) error {
-	_, err := ps.file.WriteAt(saveTask.Piece, int64(saveTask.PieceIndex*saveTask.FixedPieceLength))
+	_, err := ps.file.WriteAt(saveTask.Piece, int64(saveTask.PieceIndex*ps.fixedPieceLength))
 	if err != nil {
 		log.Fatal("Error writing to file: ", err)
 		return err

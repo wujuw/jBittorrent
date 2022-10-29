@@ -21,9 +21,8 @@ type DownloadPieceTask struct {
 }
 
 type SavePieceTask struct {
-	PieceIndex       int
-	FixedPieceLength int
-	Piece            []byte
+	PieceIndex int
+	Piece      []byte
 }
 
 type Client struct {
@@ -49,8 +48,10 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId,
 		peerPort, 0, 0, metaInfo.Info.Length, 1, 50, "empty")
 
+	bitfield := GetBitfield(metaInfo, downloadDir, bitfieldDir)
+
 	return &Client{
-		bitField:      GetBitfield(metaInfo, downloadDir, bitfieldDir),
+		bitField:      bitfield,
 		pieceNum:      len(metaInfo.Info.Pieces),
 		metaInfo:      metaInfo,
 		trackerClient: trackerClient,
@@ -58,7 +59,7 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 		downloadChan:  make(chan DownloadPieceTask, 100),
 		fallbackChan:  make(chan DownloadPieceTask, downloaderNum+1),
 		saveChan:      make(chan SavePieceTask, 100),
-		peerChan:      make(chan *Peer, 10),
+		peerChan:      make(chan *Peer, downloaderNum),
 		downloadDir:   downloadDir,
 		downloaderNum: downloaderNum,
 	}, nil
@@ -90,6 +91,7 @@ func (client *Client) SavePiece() {
 		return
 	}
 	defer PieceSaver.Close()
+	var saved int = 0
 	for saveTask := range client.saveChan {
 		client.bitField[saveTask.PieceIndex/8] |= 1 << uint(7-saveTask.PieceIndex%8)
 		err := PieceSaver.SavePiece(saveTask, client.bitField)
@@ -98,11 +100,13 @@ func (client *Client) SavePiece() {
 		} else {
 			client.trackerClient.downloaded += len(saveTask.Piece)
 			client.trackerClient.left -= len(saveTask.Piece)
-			if client.trackerClient.left == 0 {
+			saved++
+			if client.pieceNum == saved {
 				client.trackerClient.event = "completed"
 				log.Println("download finished")
 				close(client.fallbackChan)
 				close(client.downloadChan)
+				close(client.saveChan)
 				return
 			}
 		}

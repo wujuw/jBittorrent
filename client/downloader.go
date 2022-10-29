@@ -36,19 +36,19 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*D
 		return nil, err
 	}
 
-	sendBitfield(conn, bitfield)
-
-	bitfieldMsg, err := getBitfield(conn)
-	if err != nil {
-		fmt.Println("Error getting bitfield from peer: ", err)
-		return nil, err
-	}
-
 	state := &State{
 		am_choking:      true,
 		am_interested:   false,
 		peer_choking:    true,
 		peer_interested: false,
+	}
+
+	sendBitfield(conn, bitfield)
+
+	bitfieldMsg, err := getBitfield(conn, state)
+	if err != nil {
+		fmt.Println("Error getting bitfield from peer: ", err)
+		return nil, err
 	}
 
 	if err != nil {
@@ -108,6 +108,7 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 	fallbackChan chan DownloadPieceTask) error {
 	defer client.conn.Close()
 	go client.Keepalive()
+
 	for task := range downloadChan {
 		fmt.Println("Downloading piece: ", task.PieceIndex)
 		if (client.bitfield[task.PieceIndex/8] & (1 << uint(7-(task.PieceIndex%8)))) == 0 {
@@ -140,10 +141,12 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 		slicebegin := 0
 		slicelength := 16384
 
+		sliceNum := task.PieceLength/slicelength + 1
+
 		for slicebegin < task.PieceLength {
 			slicebeginSend := slicebegin
 			slicelengthSend := slicelength
-			for i := 0; i < 10; i++ {
+			for i := 0; i < sliceNum; i++ {
 				if slicebeginSend < task.PieceLength {
 					if slicebeginSend+slicelengthSend > task.PieceLength {
 						slicelengthSend = task.PieceLength - slicebeginSend
@@ -159,7 +162,7 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 					break
 				}
 			}
-			for i := 0; i < 10; i++ {
+			for i := 0; i < sliceNum; i++ {
 				if slicebegin < task.PieceLength {
 					for pieceMsg := false; !pieceMsg; {
 						msg, err := ReadMessageFrom(client.conn)
@@ -224,12 +227,21 @@ func sendBitfield(conn net.Conn, bitfield []byte) error {
 	return err
 }
 
-func getBitfield(conn net.Conn) (*Message, error) {
-	bitfieldMsg, err := ReadMessageFrom(conn)
-	if err != nil {
-		return nil, err
+func getBitfield(conn net.Conn, state *State) (*Message, error) {
+	for {
+		bitfieldMsg, err := ReadMessageFrom(conn)
+		if err != nil {
+			return nil, err
+		}
+		switch bitfieldMsg.typeId {
+		case Bitfield:
+			return bitfieldMsg, nil
+		case Unchoke:
+			state.peer_choking = false
+		default:
+			continue
+		}
 	}
-	return bitfieldMsg, nil
 }
 
 // func sendBitfield(conn net.Conn) error {

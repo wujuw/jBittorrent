@@ -2,11 +2,9 @@ package main
 
 import (
 	"fmt"
+	"github.com/wujuw/jBittorrent/client"
 	"io"
 	"os"
-
-	"github.com/wujuw/jBittorrent/client"
-	// "time"
 )
 
 func main() {
@@ -37,5 +35,4 @@ func main() {
 
 	client.StartDownload()
 
-	// time.Sleep(100 * time.Second)
 }
