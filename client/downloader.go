@@ -96,7 +96,7 @@ func HandShake(server *Peer, handShakeMsg []byte, conn net.Conn) error {
 	if !bytes.Equal(resp[0:20], handShakeMsg[0:20]) ||
 		!bytes.Equal(resp[28:48], handShakeMsg[28:48]) ||
 		(server.PeerId != "" && !bytes.Equal(resp[48:68], []byte(server.PeerId))) {
-		//return fmt.Errorf("handshake response: %s is not valid", resp)
+		return fmt.Errorf("handshake response: %s is not valid", resp)
 	}
 
 	fmt.Println("Handshake successful")
