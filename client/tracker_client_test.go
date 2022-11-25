@@ -26,7 +26,7 @@ func TestTrackerClient(t *testing.T) {
 	}
 	peerId := "-JB0001-123456789012"
 	fmt.Println(metaInfo.InfoHash)
-	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId, 6881, 0, 0, metaInfo.Info.Length, 1, 4, "empty")
+	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId, 6881, 0, 0, metaInfo.Info.Length, 1, 4, "started")
 	_, err = trackerClient.Announce()
 	if err != nil {
 		t.Error("Error announcing to tracker: ", err)

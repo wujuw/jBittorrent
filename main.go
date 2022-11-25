@@ -27,12 +27,12 @@ func main() {
 		fmt.Println("Error parsing metainfo:", err)
 		os.Exit(1)
 	}
-	client, err := client.NewClient(metaInfo, os.Args[2], 64)
+	c, err := client.NewClient(metaInfo, os.Args[2], 64)
 	if err != nil {
 		fmt.Println("Error creating peer client:", err)
 		os.Exit(1)
 	}
 
-	client.StartDownload()
+	c.StartDownload()
 
 }

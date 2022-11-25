@@ -82,7 +82,7 @@ func TestParseMetaInfo(t *testing.T) {
 }
 
 func TestParseMetaInfoFile(t *testing.T) {
-	file, err := os.Open("Alpine Standard 3.16.2 x86 64 ISO.torrent")
+	file, err := os.Open("../download/Alpine Standard 3.16.2 x86 64 ISO.torrent")
 	if err != nil {
 		t.Error("Error opening file: ", err)
 	}
