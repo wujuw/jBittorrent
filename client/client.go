@@ -3,6 +3,7 @@ package client
 import (
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 )
 
@@ -28,6 +29,7 @@ type SavePieceTask struct {
 type Client struct {
 	bitField      []byte
 	pieceNum      int
+	savedNum      int
 	wg            sync.WaitGroup
 	metaInfo      *MetaInfo
 	trackerClient *TrackerClient
@@ -38,6 +40,8 @@ type Client struct {
 	peerChan      chan *Peer
 	downloadDir   string
 	downloaderNum int
+	peerId        string
+	peerPort      int
 }
 
 func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Client, error) {
@@ -62,6 +66,9 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 		peerChan:      make(chan *Peer, downloaderNum),
 		downloadDir:   downloadDir,
 		downloaderNum: downloaderNum,
+		savedNum:      calcSavedNum(bitfield, len(metaInfo.Info.Pieces)),
+		peerId:        peerId,
+		peerPort:      peerPort,
 	}, nil
 }
 
@@ -73,7 +80,6 @@ func (client *Client) StartDownload() {
 	go client.FetchPeers(cancelChan)
 
 	for i := 0; i < client.downloaderNum; i++ {
-		client.wg.Add(1)
 		go client.DownloadFromPeer(i)
 	}
 
@@ -91,56 +97,77 @@ func (client *Client) SavePiece() {
 		return
 	}
 	defer PieceSaver.Close()
-	var saved int = 0
-	for saveTask := range client.saveChan {
+	var saved int = client.savedNum
+	var saveTask SavePieceTask
+	for client.pieceNum != saved {
+		saveTask = <-client.saveChan
 		client.bitField[saveTask.PieceIndex/8] |= 1 << uint(7-saveTask.PieceIndex%8)
 		err := PieceSaver.SavePiece(saveTask, client.bitField)
 		if err != nil {
 			log.Println("saving piece error ", err)
+			panic(err)
 		} else {
 			client.trackerClient.downloaded += len(saveTask.Piece)
 			client.trackerClient.left -= len(saveTask.Piece)
 			saved++
-			if client.pieceNum == saved {
-				client.trackerClient.event = "completed"
-				log.Println("download finished")
-				close(client.fallbackChan)
-				close(client.downloadChan)
-				close(client.saveChan)
-				return
-			}
 		}
 	}
+	client.trackerClient.event = "completed"
+	log.Println("download finished")
+	close(client.fallbackChan)
+	close(client.downloadChan)
+	close(client.saveChan)
+	return
 }
 
 func (client *Client) FetchPeers(cancelChan chan struct{}) {
 	client.trackerClient.numwant = 50
 	client.trackerClient.event = "started"
-	for {
+
+	trackerList := make([]string, 0, 50)
+	trackerList = append(trackerList, client.metaInfo.Announce)
+	for _, urlList := range client.metaInfo.AnnounceList {
+		for _, trackerUrl := range urlList {
+			// 只支持http tracker
+			if strings.HasPrefix(trackerUrl, "http") {
+				trackerList = append(trackerList, trackerUrl)
+			}
+		}
+	}
+
+	for _, trackerUrl := range trackerList {
 		select {
 		case <-cancelChan:
 			return
 		default:
-			res, err := client.trackerClient.Announce()
-			if err != nil {
-				panic(err)
-			}
-			for _, peer := range res.Peers {
-				client.peerChan <- &peer
-			}
+			go client.FetchPeersFromTracker(trackerUrl)
 		}
 	}
 }
 
+func (client *Client) FetchPeersFromTracker(trackerUrl string) {
+	trackerClient := NewTrackerClient(trackerUrl, client.metaInfo.InfoHash, client.peerId,
+		client.peerPort, 0, 0, client.metaInfo.Info.Length, 1, 50, "started")
+	res, err := trackerClient.Announce()
+	if err != nil {
+		log.Println("warning: request " + trackerUrl + " failed, error: " + err.Error())
+		return
+	}
+	for i, _ := range res.Peers {
+		client.peerChan <- &res.Peers[i]
+	}
+}
+
 func (client *Client) DownloadFromPeer(Id int) {
-	defer client.wg.Done()
 	for {
 		downloader, err := NewDownloader(<-client.peerChan, client.handShakeMsg, client.bitField, Id)
 		log.Println("new downloader ", Id)
 		if err != nil {
 			continue
 		}
+		client.wg.Add(1)
 		err = downloader.Download(client.downloadChan, client.saveChan, client.fallbackChan)
+		client.wg.Done()
 		if err != nil {
 			log.Println("downloader error ", err)
 			continue
@@ -203,4 +230,16 @@ func randomString(n int, allowedChars ...[]rune) string {
 	}
 
 	return string(b)
+}
+
+func calcSavedNum(bitField []byte, pieceNum int) int {
+	savedNum := 0
+	for i := 0; i < pieceNum; i++ {
+		bitFiledIndex := i / 8
+		bitFiledOffset := i % 8
+		if bitField[bitFiledIndex]&(1<<uint(7-bitFiledOffset)) == 1<<uint(7-bitFiledOffset) {
+			savedNum++
+		}
+	}
+	return savedNum
 }

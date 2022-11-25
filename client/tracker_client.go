@@ -1,8 +1,10 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 )
@@ -62,6 +64,9 @@ func (client *TrackerClient) AnnounceWithParams(urlParams string) (*TrackerRespo
 	res, err := client.httpClient.Get(client.trackerUrl + urlParams)
 	if err != nil {
 		return nil, err
+	} else if res.StatusCode != 200 {
+		log.Println(res)
+		return nil, errors.New(res.Status)
 	}
 	defer res.Body.Close()
 

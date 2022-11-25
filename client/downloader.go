@@ -15,6 +15,7 @@ type Downloader struct {
 	conn     net.Conn
 	state    *State
 	Id       int
+	finished bool
 }
 
 type State struct {
@@ -61,6 +62,7 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*D
 		conn:     conn,
 		state:    state,
 		Id:       Id,
+		finished: false,
 	}, nil
 }
 
@@ -104,23 +106,23 @@ func HandShake(server *Peer, handShakeMsg []byte, conn net.Conn) error {
 	return nil
 }
 
-func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveChan chan SavePieceTask,
+func (downloader *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveChan chan SavePieceTask,
 	fallbackChan chan DownloadPieceTask) error {
-	defer client.conn.Close()
-	go client.Keepalive()
+	defer downloader.conn.Close()
+	go downloader.Keepalive()
 
 	for task := range downloadChan {
 		fmt.Println("Downloading piece: ", task.PieceIndex)
-		if (client.bitfield[task.PieceIndex/8] & (1 << uint(7-(task.PieceIndex%8)))) == 0 {
+		if (downloader.bitfield[task.PieceIndex/8] & (1 << uint(7-(task.PieceIndex%8)))) == 0 {
 			fmt.Println("Peer does not have piece: ", task)
 			fallbackChan <- task
 			continue
 		}
-		sendInterested(client.conn)
-		client.state.am_interested = true
-		for client.state.peer_choking {
-			log.Default().Printf("Downloader %d is choking, waiting for unchoke", client.Id)
-			msg, err := ReadMessageFrom(client.conn)
+		sendInterested(downloader.conn)
+		downloader.state.am_interested = true
+		for downloader.state.peer_choking {
+			log.Default().Printf("Downloader %d is choking, waiting for unchoke", downloader.Id)
+			msg, err := ReadMessageFrom(downloader.conn)
 			if err != nil {
 				fmt.Println("Error reading message: ", err)
 				fallbackChan <- task
@@ -128,12 +130,12 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 			}
 			switch msg.typeId {
 			case Unchoke:
-				client.state.peer_choking = false
+				downloader.state.peer_choking = false
 			case Choke:
-				client.state.peer_choking = true
+				downloader.state.peer_choking = true
 			case Have:
 				index := int(msg.payload[0])<<24 | int(msg.payload[1])<<16 | int(msg.payload[2])<<8 | int(msg.payload[3])
-				client.bitfield[index/8] |= 1 << uint(7-(index%8))
+				downloader.bitfield[index/8] |= 1 << uint(7-(index%8))
 			}
 		}
 		fmt.Println("Starting download of piece: ", task.PieceIndex)
@@ -151,7 +153,7 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 					if slicebeginSend+slicelengthSend > task.PieceLength {
 						slicelengthSend = task.PieceLength - slicebeginSend
 					}
-					err := sendRequest(client.conn, task.PieceIndex, slicebeginSend, slicelengthSend)
+					err := sendRequest(downloader.conn, task.PieceIndex, slicebeginSend, slicelengthSend)
 					if err != nil {
 						fmt.Println("Error sending request: ", err)
 						fallbackChan <- task
@@ -165,7 +167,7 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 			for i := 0; i < sliceNum; i++ {
 				if slicebegin < task.PieceLength {
 					for pieceMsg := false; !pieceMsg; {
-						msg, err := ReadMessageFrom(client.conn)
+						msg, err := ReadMessageFrom(downloader.conn)
 						if err != nil {
 							fmt.Println("Error reading message: ", err)
 							fallbackChan <- task
@@ -203,12 +205,13 @@ func (client *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveCh
 		fmt.Println("Downloaded piece: ", task.PieceIndex)
 		saveChan <- SavePieceTask{PieceIndex: task.PieceIndex, Piece: piece}
 	}
-	log.Printf("downloader %d work done.\n", client.Id)
+	log.Printf("downloader %d work done.\n", downloader.Id)
+	downloader.finished = true
 	return nil
 }
 
 func (downloader *Downloader) Keepalive() error {
-	for {
+	for !downloader.finished {
 		time.Sleep(30 * time.Second)
 		err := SendKeepalive(downloader.conn)
 		if err != nil {
@@ -216,6 +219,7 @@ func (downloader *Downloader) Keepalive() error {
 			return err
 		}
 	}
+	return nil
 }
 
 func sendBitfield(conn net.Conn, bitfield []byte) error {
