@@ -1,10 +1,13 @@
 package client
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
@@ -32,7 +35,6 @@ type Client struct {
 	savedNum      int
 	wg            sync.WaitGroup
 	metaInfo      *MetaInfo
-	trackerClient *TrackerClient
 	handShakeMsg  []byte
 	downloadChan  chan DownloadPieceTask
 	saveChan      chan SavePieceTask
@@ -42,6 +44,10 @@ type Client struct {
 	downloaderNum int
 	peerId        string
 	peerPort      int
+	peers         map[int]*Peer
+	paused        bool
+	speed         string
+	cancelChan    chan struct{}
 }
 
 func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Client, error) {
@@ -49,16 +55,12 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 	// peerId := "-UT0001-123456789012"
 	peerPort := 6881
 
-	trackerClient := NewTrackerClient(metaInfo.Announce, metaInfo.InfoHash, peerId,
-		peerPort, 0, 0, metaInfo.Info.Length, 1, 50, "empty")
-
 	bitfield := GetBitfield(metaInfo, downloadDir, bitfieldDir)
 
 	return &Client{
 		bitField:      bitfield,
 		pieceNum:      len(metaInfo.Info.Pieces),
 		metaInfo:      metaInfo,
-		trackerClient: trackerClient,
 		handShakeMsg:  handShakeMsg(metaInfo, peerId),
 		downloadChan:  make(chan DownloadPieceTask, 100),
 		fallbackChan:  make(chan DownloadPieceTask, downloaderNum+1),
@@ -69,15 +71,19 @@ func NewClient(metaInfo *MetaInfo, downloadDir string, downloaderNum int) (*Clie
 		savedNum:      calcSavedNum(bitfield, len(metaInfo.Info.Pieces)),
 		peerId:        peerId,
 		peerPort:      peerPort,
+		peers:         make(map[int]*Peer, downloaderNum),
+		paused:        true,
+		speed:         "0B/S",
+		cancelChan:    make(chan struct{}),
 	}, nil
 }
 
 func (client *Client) StartDownload() {
+	client.paused = false
 	client.wg.Add(1)
 	go client.SendDownloadTask()
 
-	cancelChan := make(chan struct{})
-	go client.FetchPeers(cancelChan)
+	go client.FetchPeers(client.cancelChan)
 
 	for i := 0; i < client.downloaderNum; i++ {
 		go client.DownloadFromPeer(i)
@@ -86,8 +92,10 @@ func (client *Client) StartDownload() {
 	client.wg.Add(1)
 	go client.SavePiece()
 
+	go client.calcSpeed()
 	client.wg.Wait()
-	close(cancelChan)
+	//close(client.cancelChan)
+	client.paused = true
 }
 
 func (client *Client) SavePiece() {
@@ -97,33 +105,34 @@ func (client *Client) SavePiece() {
 		return
 	}
 	defer PieceSaver.Close()
-	var saved int = client.savedNum
 	var saveTask SavePieceTask
-	for client.pieceNum != saved {
-		saveTask = <-client.saveChan
-		client.bitField[saveTask.PieceIndex/8] |= 1 << uint(7-saveTask.PieceIndex%8)
-		err := PieceSaver.SavePiece(saveTask, client.bitField)
-		if err != nil {
-			log.Println("saving piece error ", err)
-			panic(err)
-		} else {
-			client.trackerClient.downloaded += len(saveTask.Piece)
-			client.trackerClient.left -= len(saveTask.Piece)
-			saved++
+	if client.savedNum != client.pieceNum {
+		for saveTask = range client.saveChan {
+			client.bitField[saveTask.PieceIndex/8] |= 1 << uint(7-saveTask.PieceIndex%8)
+			err := PieceSaver.SavePiece(saveTask, client.bitField)
+			if err != nil {
+				log.Println("saving piece error ", err)
+				panic(err)
+			} else {
+				client.savedNum++
+				if client.savedNum == client.pieceNum {
+					close(client.saveChan)
+				}
+			}
 		}
 	}
-	client.trackerClient.event = "completed"
-	log.Println("download finished")
-	close(client.fallbackChan)
-	close(client.downloadChan)
-	close(client.saveChan)
+	if client.savedNum == client.pieceNum {
+		log.Println("download finished")
+		close(client.fallbackChan)
+		close(client.downloadChan)
+	} else {
+		log.Println("download stop")
+		close(client.fallbackChan)
+	}
 	return
 }
 
 func (client *Client) FetchPeers(cancelChan chan struct{}) {
-	client.trackerClient.numwant = 50
-	client.trackerClient.event = "started"
-
 	trackerList := make([]string, 0, 50)
 	trackerList = append(trackerList, client.metaInfo.Announce)
 	for _, urlList := range client.metaInfo.AnnounceList {
@@ -160,14 +169,17 @@ func (client *Client) FetchPeersFromTracker(trackerUrl string) {
 
 func (client *Client) DownloadFromPeer(Id int) {
 	for {
-		downloader, err := NewDownloader(<-client.peerChan, client.handShakeMsg, client.bitField, Id)
+		peer := <-client.peerChan
+		downloader, err := NewDownloader(peer, client.handShakeMsg, client.bitField, Id)
 		log.Println("new downloader ", Id)
 		if err != nil {
 			continue
 		}
+		client.peers[Id] = peer
 		client.wg.Add(1)
-		err = downloader.Download(client.downloadChan, client.saveChan, client.fallbackChan)
+		err = downloader.Download(client.downloadChan, client.saveChan, client.fallbackChan, client.cancelChan)
 		client.wg.Done()
+		delete(client.peers, Id)
 		if err != nil {
 			log.Println("downloader error ", err)
 			continue
@@ -199,6 +211,70 @@ func (client *Client) SendDownloadTask() {
 
 	for failTask := range client.fallbackChan {
 		client.downloadChan <- failTask
+	}
+}
+
+func (client *Client) GetDownloadProcess() map[string]string {
+	info := make(map[string]string)
+	downloadedBytes := client.savedNum * client.metaInfo.Info.PieceLength
+	if downloadedBytes < 1024 {
+		info["downloaded"] = strconv.Itoa(downloadedBytes) + "B"
+	} else if downloadedBytes < 1024*1024 {
+		info["downloaded"] = strconv.Itoa(downloadedBytes/1024) + "KB"
+	} else if downloadedBytes < 1024*1024*1024 {
+		info["downloaded"] = strconv.Itoa(downloadedBytes/(1024*1024)) + "MB"
+	} else {
+		info["downloaded"] = fmt.Sprintf("%.1f", float64(downloadedBytes)/float64(1024*1024*1024)) + "GB"
+	}
+	all := client.metaInfo.Info.Length
+	if all < 1024 {
+		info["all"] = strconv.Itoa(all) + "B"
+	} else if all < 1024*1024 {
+		info["all"] = strconv.Itoa(all/1024) + "KB"
+	} else if all < 1024*1024*1024 {
+		info["all"] = strconv.Itoa(all/(1024*1024)) + "MB"
+	} else {
+		info["all"] = fmt.Sprintf("%.1f", float64(all)/float64(1024*1024*1024)) + "GB"
+	}
+	percent := float64(downloadedBytes) / float64(all) * 100
+	if percent-100 > 0 {
+		percent = 100
+	}
+	info["percent"] = fmt.Sprintf("%.2f", percent) + "%"
+	info["speed"] = client.speed
+
+	return info
+}
+
+func (client *Client) GetPeers() map[int]*Peer {
+	return client.peers
+}
+
+func (client *Client) Stop() {
+	close(client.cancelChan)
+	time.Sleep(time.Second * 3)
+}
+
+func (client *Client) calcSpeed() {
+	for {
+		start := time.Now().Second()
+		startNum := client.savedNum
+		time.Sleep(time.Second * 1)
+		end := time.Now().Second()
+		endNum := client.savedNum
+
+		speed := (endNum - startNum) * client.metaInfo.Info.PieceLength / (end - start) // Bytes/s
+		speedStr := ""
+		if speed < 1024 {
+			speedStr = strconv.Itoa(speed) + "B/S"
+		} else if speed < 1024*1024 {
+			speedStr = strconv.Itoa(speed/1024) + "KB/S"
+		} else if speed < 1024*1024*1024 {
+			speedStr = fmt.Sprintf("%.1f", float64(speed)/float64(1024*1024)) + "MB/S"
+		} else {
+			speedStr = fmt.Sprintf("%.1f", float64(speed)/float64(1024*1024*1024)) + "GB/S"
+		}
+		client.speed = speedStr
 	}
 }
 

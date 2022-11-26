@@ -4,7 +4,10 @@ import (
 	"fmt"
 	"github.com/wujuw/jBittorrent/client"
 	"io"
+	"log"
 	"os"
+	"sort"
+	"strconv"
 )
 
 func main() {
@@ -33,6 +36,35 @@ func main() {
 		os.Exit(1)
 	}
 
-	c.StartDownload()
+	go c.StartDownload()
+	log.SetOutput(io.Discard)
 
+	var command string
+	for {
+		fmt.Println("Please input command: ")
+		fmt.Scan(&command)
+		switch command {
+		case "process":
+			info := c.GetDownloadProcess()
+			fmt.Println(fmt.Sprintf("downloaded: %s / %s, %s, download speed: %s", info["downloaded"], info["all"], info["percent"], info["speed"]))
+		case "peers":
+			peers := c.GetPeers()
+			keys := make([]int, 0, len(peers))
+			for key := range peers {
+				keys = append(keys, key)
+			}
+			sort.Ints(keys)
+			for _, id := range keys {
+				fmt.Println(fmt.Sprintf("downloader %s connected peer: [%s]:%s", strconv.Itoa(id), peers[id].IP, strconv.Itoa(peers[id].Port)))
+			}
+		case "exit":
+			c.Stop()
+			os.Exit(0)
+		default:
+			fmt.Println("support command: ")
+			fmt.Println("process: show the download process")
+			fmt.Println("peers: show the connected peers")
+			fmt.Println("exit: stop the download")
+		}
+	}
 }

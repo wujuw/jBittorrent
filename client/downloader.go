@@ -28,12 +28,12 @@ type State struct {
 func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*Downloader, error) {
 	conn, err := Connect(peer)
 	if err != nil {
-		fmt.Println("Error connecting to peer: ", err)
+		log.Println("Error connecting to peer: ", err)
 		return nil, err
 	}
 	err = HandShake(peer, handShakeMsg, conn)
 	if err != nil {
-		fmt.Println("Error handshaking with peer: ", err)
+		log.Println("Error handshaking with peer: ", err)
 		return nil, err
 	}
 
@@ -48,12 +48,12 @@ func NewDownloader(peer *Peer, handShakeMsg []byte, bitfield []byte, Id int) (*D
 
 	bitfieldMsg, err := getBitfield(conn, state)
 	if err != nil {
-		fmt.Println("Error getting bitfield from peer: ", err)
+		log.Println("Error getting bitfield from peer: ", err)
 		return nil, err
 	}
 
 	if err != nil {
-		fmt.Println("Error sending interested to peer: ", err)
+		log.Println("Error sending interested to peer: ", err)
 		return nil, err
 	}
 
@@ -71,7 +71,7 @@ func Connect(server *Peer) (net.Conn, error) {
 	// conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", server.IP, server.Port))
 
 	if err != nil {
-		fmt.Println("Error connecting to peer: ", err)
+		log.Println("Error connecting to peer: ", err)
 		return nil, err
 	}
 
@@ -81,14 +81,14 @@ func Connect(server *Peer) (net.Conn, error) {
 func HandShake(server *Peer, handShakeMsg []byte, conn net.Conn) error {
 	_, err := conn.Write(handShakeMsg)
 	if err != nil {
-		fmt.Println("Error writing handshake: ", err)
+		log.Println("Error writing handshake: ", err)
 		return fmt.Errorf("could not send handshake message: %s", err)
 	}
 
 	resp := make([]byte, 68)
 	n, err := io.ReadFull(conn, resp)
 	if err != nil {
-		fmt.Println("Error reading handshake: ", err)
+		log.Println("Error reading handshake: ", err)
 		return err
 	}
 	if n != 68 {
@@ -101,109 +101,114 @@ func HandShake(server *Peer, handShakeMsg []byte, conn net.Conn) error {
 		return fmt.Errorf("handshake response: %s is not valid", resp)
 	}
 
-	fmt.Println("Handshake successful")
+	log.Println("Handshake successful")
 
 	return nil
 }
 
 func (downloader *Downloader) Download(downloadChan <-chan DownloadPieceTask, saveChan chan SavePieceTask,
-	fallbackChan chan DownloadPieceTask) error {
+	fallbackChan chan DownloadPieceTask, cancelChan <-chan struct{}) error {
 	defer downloader.conn.Close()
 	go downloader.Keepalive()
 
 	for task := range downloadChan {
-		fmt.Println("Downloading piece: ", task.PieceIndex)
-		if (downloader.bitfield[task.PieceIndex/8] & (1 << uint(7-(task.PieceIndex%8)))) == 0 {
-			fmt.Println("Peer does not have piece: ", task)
-			fallbackChan <- task
-			continue
-		}
-		sendInterested(downloader.conn)
-		downloader.state.am_interested = true
-		for downloader.state.peer_choking {
-			log.Default().Printf("Downloader %d is choking, waiting for unchoke", downloader.Id)
-			msg, err := ReadMessageFrom(downloader.conn)
-			if err != nil {
-				fmt.Println("Error reading message: ", err)
+		select {
+		case <-cancelChan:
+			return nil
+		default:
+			log.Println("Downloading piece: ", task.PieceIndex)
+			if (downloader.bitfield[task.PieceIndex/8] & (1 << uint(7-(task.PieceIndex%8)))) == 0 {
+				log.Println("Peer does not have piece: ", task)
 				fallbackChan <- task
-				return err
+				continue
 			}
-			switch msg.typeId {
-			case Unchoke:
-				downloader.state.peer_choking = false
-			case Choke:
-				downloader.state.peer_choking = true
-			case Have:
-				index := int(msg.payload[0])<<24 | int(msg.payload[1])<<16 | int(msg.payload[2])<<8 | int(msg.payload[3])
-				downloader.bitfield[index/8] |= 1 << uint(7-(index%8))
-			}
-		}
-		fmt.Println("Starting download of piece: ", task.PieceIndex)
-		piece := make([]byte, task.PieceLength)
-		slicebegin := 0
-		slicelength := 16384
-
-		sliceNum := task.PieceLength/slicelength + 1
-
-		for slicebegin < task.PieceLength {
-			slicebeginSend := slicebegin
-			slicelengthSend := slicelength
-			for i := 0; i < sliceNum; i++ {
-				if slicebeginSend < task.PieceLength {
-					if slicebeginSend+slicelengthSend > task.PieceLength {
-						slicelengthSend = task.PieceLength - slicebeginSend
-					}
-					err := sendRequest(downloader.conn, task.PieceIndex, slicebeginSend, slicelengthSend)
-					if err != nil {
-						fmt.Println("Error sending request: ", err)
-						fallbackChan <- task
-						return err
-					}
-					slicebeginSend += slicelengthSend
-				} else {
-					break
+			sendInterested(downloader.conn)
+			downloader.state.am_interested = true
+			for downloader.state.peer_choking {
+				log.Printf("Downloader %d is choking, waiting for unchoke", downloader.Id)
+				msg, err := ReadMessageFrom(downloader.conn)
+				if err != nil {
+					log.Println("Error reading message: ", err)
+					fallbackChan <- task
+					return err
+				}
+				switch msg.typeId {
+				case Unchoke:
+					downloader.state.peer_choking = false
+				case Choke:
+					downloader.state.peer_choking = true
+				case Have:
+					index := int(msg.payload[0])<<24 | int(msg.payload[1])<<16 | int(msg.payload[2])<<8 | int(msg.payload[3])
+					downloader.bitfield[index/8] |= 1 << uint(7-(index%8))
 				}
 			}
-			for i := 0; i < sliceNum; i++ {
-				if slicebegin < task.PieceLength {
-					for pieceMsg := false; !pieceMsg; {
-						msg, err := ReadMessageFrom(downloader.conn)
+			log.Println("Starting download of piece: ", task.PieceIndex)
+			piece := make([]byte, task.PieceLength)
+			slicebegin := 0
+			slicelength := 16384
+
+			sliceNum := task.PieceLength/slicelength + 1
+
+			for slicebegin < task.PieceLength {
+				slicebeginSend := slicebegin
+				slicelengthSend := slicelength
+				for i := 0; i < sliceNum; i++ {
+					if slicebeginSend < task.PieceLength {
+						if slicebeginSend+slicelengthSend > task.PieceLength {
+							slicelengthSend = task.PieceLength - slicebeginSend
+						}
+						err := sendRequest(downloader.conn, task.PieceIndex, slicebeginSend, slicelengthSend)
 						if err != nil {
-							fmt.Println("Error reading message: ", err)
+							log.Println("Error sending request: ", err)
 							fallbackChan <- task
 							return err
 						}
-						switch msg.typeId {
-						case Piece:
-							pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
-							begin := uint32(BytesToInt32(msg.payload[4:8]))
-							slice := msg.payload[8:]
-							if pieceIndex != uint32(task.PieceIndex) {
-								fmt.Println("Error: piece index does not match")
-								continue
-							} else if begin != uint32(slicebegin) {
-								fmt.Println("Error: begin does not match")
-								continue
-							}
-							copy(piece[slicebegin:], slice)
-							slicebegin += len(slice)
-							fmt.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB\n", task.PieceIndex, slicebegin, slicelength)
-							pieceMsg = true
-						}
+						slicebeginSend += slicelengthSend
+					} else {
+						break
 					}
-				} else {
-					break
+				}
+				for i := 0; i < sliceNum; i++ {
+					if slicebegin < task.PieceLength {
+						for pieceMsg := false; !pieceMsg; {
+							msg, err := ReadMessageFrom(downloader.conn)
+							if err != nil {
+								log.Println("Error reading message: ", err)
+								fallbackChan <- task
+								return err
+							}
+							switch msg.typeId {
+							case Piece:
+								pieceIndex := uint32(BytesToInt32(msg.payload[0:4]))
+								begin := uint32(BytesToInt32(msg.payload[4:8]))
+								slice := msg.payload[8:]
+								if pieceIndex != uint32(task.PieceIndex) {
+									log.Println("Error: piece index does not match")
+									continue
+								} else if begin != uint32(slicebegin) {
+									log.Println("Error: begin does not match")
+									continue
+								}
+								copy(piece[slicebegin:], slice)
+								slicebegin += len(slice)
+								log.Printf("Downloaded slice of piece %d, slice begin:%d, slice length: %dB\n", task.PieceIndex, slicebegin, slicelength)
+								pieceMsg = true
+							}
+						}
+					} else {
+						break
+					}
 				}
 			}
+			downloadPieceHash := sha1.Sum(piece)
+			if !bytes.Equal(downloadPieceHash[:], task.PieceHash[:]) {
+				log.Println("Error: piece hash does not match")
+				fallbackChan <- task
+				continue
+			}
+			log.Println("Downloaded piece: ", task.PieceIndex)
+			saveChan <- SavePieceTask{PieceIndex: task.PieceIndex, Piece: piece}
 		}
-		downloadPieceHash := sha1.Sum(piece)
-		if !bytes.Equal(downloadPieceHash[:], task.PieceHash[:]) {
-			fmt.Println("Error: piece hash does not match")
-			fallbackChan <- task
-			continue
-		}
-		fmt.Println("Downloaded piece: ", task.PieceIndex)
-		saveChan <- SavePieceTask{PieceIndex: task.PieceIndex, Piece: piece}
 	}
 	log.Printf("downloader %d work done.\n", downloader.Id)
 	downloader.finished = true
@@ -215,7 +220,7 @@ func (downloader *Downloader) Keepalive() error {
 		time.Sleep(30 * time.Second)
 		err := SendKeepalive(downloader.conn)
 		if err != nil {
-			log.Default().Printf("Error sending keepalive: %s", err)
+			log.Printf("Error sending keepalive: %s", err)
 			return err
 		}
 	}

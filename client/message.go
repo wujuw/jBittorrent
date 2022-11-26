@@ -2,8 +2,8 @@ package client
 
 import (
 	"encoding/binary"
-	"fmt"
 	"io"
+	"log"
 )
 
 type Message struct {
@@ -69,7 +69,7 @@ func ReadMessageFrom(r io.Reader) (*Message, error) {
 	if length == 1 {
 		return NewMessage(data[0], nil), nil
 	} else {
-		fmt.Println("length: ", length)
+		log.Println("length: ", length)
 		return NewMessage(data[0], data[1:]), nil
 	}
 }

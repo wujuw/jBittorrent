@@ -6,9 +6,9 @@
   <component name="ChangeListManager">
     <list default="true" id="eab34392-4bc9-4b6d-a431-ed4e4f56c598" name="Default Changelist" comment="">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/client_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/main_test.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/parser_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/client/parser_test.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/client/tracker_client_test.go" beforeDir="false" afterPath="$PROJECT_DIR$/client/tracker_client_test.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/client/client.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/downloader.go" beforeDir="false" afterPath="$PROJECT_DIR$/client/downloader.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/client/message.go" beforeDir="false" afterPath="$PROJECT_DIR$/client/message.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/main.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -36,25 +36,25 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "RunOnceActivity.OpenProjectViewOnStart": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.go.format.on.save.advertiser.fired": "true",
-    "RunOnceActivity.go.formatter.settings.were.checked": "true",
-    "RunOnceActivity.go.migrated.go.modules.settings": "true",
-    "RunOnceActivity.go.modules.go.list.on.any.changes.was.set": "true",
-    "RunOnceActivity.go.watchers.conflict.with.on.save.actions.check.performed": "true",
-    "WebServerToolWindowFactoryState": "false",
-    "go.import.settings.migrated": "true",
-    "go.sdk.automatically.set": "true",
-    "last_opened_file_path": "C:/Users/whhxd/GolandProjects/awesomeProject/download",
-    "node.js.detected.package.eslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "settings.editor.selected.configurable": "goland.project.structure"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.format.on.save.advertiser.fired&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.migrated.go.modules.settings&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.modules.go.list.on.any.changes.was.set&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.watchers.conflict.with.on.save.actions.check.performed&quot;: &quot;true&quot;,
+    &quot;WebServerToolWindowFactoryState&quot;: &quot;false&quot;,
+    &quot;go.import.settings.migrated&quot;: &quot;true&quot;,
+    &quot;go.sdk.automatically.set&quot;: &quot;true&quot;,
+    &quot;last_opened_file_path&quot;: &quot;C:/Users/whhxd/GolandProjects/awesomeProject/download&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;goland.project.structure&quot;
   }
-}]]></component>
+}</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\whhxd\GolandProjects\awesomeProject\download" />
@@ -65,7 +65,7 @@
       <recent name="C:\Users\whhxd\GolandProjects\awesomeProject\client" />
     </key>
   </component>
-  <component name="RunManager" selected="Go Test.TestDownload in github.com/wujuw/jBittorrent">
+  <component name="RunManager" selected="Go Build.go build github.com/wujuw/jBittorrent">
     <configuration default="true" type="GoApplicationRunConfiguration" factoryName="Go Application">
       <module name="jBittorrent" />
       <working_directory value="$PROJECT_DIR$" />
@@ -78,7 +78,7 @@
     <configuration name="go build github.com/wujuw/jBittorrent" type="GoApplicationRunConfiguration" factoryName="Go Application" temporary="true" nameIsGenerated="true">
       <module name="jBittorrent" />
       <working_directory value="$PROJECT_DIR$" />
-      <parameters value="&quot;download/ubuntu-22.04.1-live-server-amd64.iso.torrent&quot; download" />
+      <parameters value="&quot;download/ubuntu-22.10-desktop-amd64.iso.torrent&quot; download" />
       <kind value="PACKAGE" />
       <package value="github.com/wujuw/jBittorrent" />
       <directory value="$PROJECT_DIR$" />
@@ -129,10 +129,10 @@
     </configuration>
     <recent_temporary>
       <list>
+        <item itemvalue="Go Build.go build github.com/wujuw/jBittorrent" />
         <item itemvalue="Go Test.TestDownload in github.com/wujuw/jBittorrent" />
         <item itemvalue="Go Test.go test github.com/wujuw/jBittorrent/client" />
         <item itemvalue="Go Test.go test github.com/wujuw/jBittorrent" />
-        <item itemvalue="Go Build.go build github.com/wujuw/jBittorrent" />
       </list>
     </recent_temporary>
   </component>
@@ -157,7 +157,8 @@
     <MESSAGE value="修复写文件bug" />
     <MESSAGE value="优化结构" />
     <MESSAGE value="修复bug，同时连接多个tracker" />
-    <option name="LAST_COMMIT_MESSAGE" value="修复bug，同时连接多个tracker" />
+    <MESSAGE value="编写测试" />
+    <option name="LAST_COMMIT_MESSAGE" value="编写测试" />
   </component>
   <component name="VgoProject">
     <settings-migrated>true</settings-migrated>
@@ -169,6 +170,16 @@
           <url>file://$PROJECT_DIR$/main_test.go</url>
           <line>48</line>
           <option name="timeStamp" value="37" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/main.go</url>
+          <line>50</line>
+          <option name="timeStamp" value="38" />
+        </line-breakpoint>
+        <line-breakpoint enabled="true" type="DlvLineBreakpoint">
+          <url>file://$PROJECT_DIR$/main.go</url>
+          <line>56</line>
+          <option name="timeStamp" value="40" />
         </line-breakpoint>
       </breakpoints>
     </breakpoint-manager>
